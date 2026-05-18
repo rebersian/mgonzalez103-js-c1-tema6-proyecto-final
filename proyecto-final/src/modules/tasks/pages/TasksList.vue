@@ -11,7 +11,7 @@ import {
   deleteAllCompletedTasks,
   getTasks,
 } from '@/modules/tasks/services/tasks.service';
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import { RouterLink } from 'vue-router';
 
 const toast = useToast();
@@ -19,6 +19,7 @@ const toast = useToast();
 const tasks = ref<Task[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
+const search = ref('');
 
 async function loadTasks() {
   loading.value = true;
@@ -32,6 +33,20 @@ async function loadTasks() {
     loading.value = false;
   }
 }
+
+const filteredTasks = computed(() => {
+  const q = search.value.trim().toLowerCase();
+
+  if (!q) return tasks.value;
+
+  return tasks.value.filter(
+    (t) => t.name.toLowerCase().includes(q) || (t.description?.toLowerCase().includes(q) ?? false),
+  );
+});
+
+const hasNoResults = computed(() => {
+  return !loading.value && tasks.value.length > 0 && filteredTasks.value.length === 0;
+});
 
 async function onCreateTask(payload: CreateTaskDto) {
   try {
@@ -91,6 +106,15 @@ onMounted(loadTasks);
 
     <TaskForm :disabled="loading" @submit="onCreateTask" />
 
+    <div class="mb-3">
+      <input
+        v-model="search"
+        type="text"
+        class="form-control"
+        placeholder="Buscar por nombre o descripción..."
+      />
+    </div>
+
     <div class="d-flex gap-2 mb-3">
       <button
         class="btn btn-sm btn-outline-success"
@@ -125,9 +149,9 @@ onMounted(loadTasks);
       {{ error }}
     </div>
 
-    <div v-if="!loading && tasks.length" class="list-group">
+    <div v-if="!loading && filteredTasks.length" class="list-group">
       <RouterLink
-        v-for="task in tasks"
+        v-for="task in filteredTasks"
         :key="task.id"
         :to="{ name: 'task-detail', params: { id: task.id } }"
         class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
@@ -149,13 +173,14 @@ onMounted(loadTasks);
         </div>
 
         <div class="d-flex align-items-center gap-2">
-          <small class="text-muted">{{ new Date(task.dueDate).toLocaleDateString() }}</small>
+          <small class="text-muted">
+            {{ new Date(task.dueDate).toLocaleDateString() }}
+          </small>
 
           <button
             v-if="!task.completed"
             class="btn btn-sm btn-outline-success"
             @click.prevent="onCompleteTask(task.id)"
-            title="Completar"
           >
             ✓
           </button>
@@ -163,6 +188,8 @@ onMounted(loadTasks);
       </RouterLink>
     </div>
 
-    <p v-if="!loading && tasks.length === 0" class="text-muted">No tienes tareas todavía.</p>
+    <p v-else-if="hasNoResults" class="text-muted">No hay tareas que coincidan con la búsqueda</p>
+
+    <p v-else-if="!loading && tasks.length === 0" class="text-muted">No tienes tareas todavía.</p>
   </section>
 </template>
