@@ -39,3 +39,15 @@ export async function registerUser(payload: CreateUserDto) {
     user: mapAuthResponseToUser(data),
   };
 }
+
+export async function getInfoUser() {
+  const { data } = await apiClient.get<AuthResponse>('/auth/check-status');
+
+  if (!data?.token) {
+    throw new Error('Registro OK pero no se recibió token');
+  }
+
+  return {
+    user: mapAuthResponseToUser(data),
+  };
+}

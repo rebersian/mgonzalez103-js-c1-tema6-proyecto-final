@@ -50,6 +50,12 @@ function logout() {
           </li>
 
           <li class="nav-item">
+            <RouterLink to="/perfil" class="nav-link" exact-active-class="active"
+              >Perfil</RouterLink
+            >
+          </li>
+
+          <li class="nav-item">
             <RouterLink to="/about" class="nav-link" exact-active-class="active">About</RouterLink>
           </li>
 
