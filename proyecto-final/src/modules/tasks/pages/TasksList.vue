@@ -19,7 +19,43 @@ const toast = useToast();
 const tasks = ref<Task[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
+
 const search = ref('');
+
+type SortField = 'date' | 'priority' | null;
+type SortDirection = 'asc' | 'desc';
+
+const sortField = ref<SortField>(null);
+const sortDirection = ref<SortDirection>('asc');
+
+type ViewMode = 'list' | 'cards';
+const viewMode = ref<ViewMode>('list');
+
+const priorityValue = (p: TaskPriority) => {
+  if (p === 'high') return 3;
+  if (p === 'medium') return 2;
+  return 1;
+};
+
+const isActiveSort = (field: SortField) => sortField.value === field;
+
+const toggleSort = (field: SortField) => {
+  if (sortField.value === field) {
+    sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortField.value = field;
+    sortDirection.value = 'asc';
+  }
+};
+
+const clearSort = () => {
+  sortField.value = null;
+  sortDirection.value = 'asc';
+};
+
+const toggleView = () => {
+  viewMode.value = viewMode.value === 'list' ? 'cards' : 'list';
+};
 
 async function loadTasks() {
   loading.value = true;
@@ -37,15 +73,28 @@ async function loadTasks() {
 const filteredTasks = computed(() => {
   const q = search.value.trim().toLowerCase();
 
-  if (!q) return tasks.value;
-
-  return tasks.value.filter(
+  let result = tasks.value.filter(
     (t) => t.name.toLowerCase().includes(q) || (t.description?.toLowerCase().includes(q) ?? false),
   );
-});
 
-const hasNoResults = computed(() => {
-  return !loading.value && tasks.value.length > 0 && filteredTasks.value.length === 0;
+  if (!sortField.value) return result;
+
+  result = [...result].sort((a, b) => {
+    let valueA: number;
+    let valueB: number;
+
+    if (sortField.value === 'date') {
+      valueA = new Date(a.dueDate).getTime();
+      valueB = new Date(b.dueDate).getTime();
+    } else {
+      valueA = priorityValue(a.priority);
+      valueB = priorityValue(b.priority);
+    }
+
+    return sortDirection.value === 'asc' ? valueA - valueB : valueB - valueA;
+  });
+
+  return result;
 });
 
 async function onCreateTask(payload: CreateTaskDto) {
@@ -107,6 +156,7 @@ onMounted(loadTasks);
     <TaskForm :disabled="loading" @submit="onCreateTask" />
 
     <div class="mb-3">
+      <p>Filtro de búsqueda:</p>
       <input
         v-model="search"
         type="text"
@@ -115,30 +165,63 @@ onMounted(loadTasks);
       />
     </div>
 
-    <div class="d-flex gap-2 mb-3">
-      <button
-        class="btn btn-sm btn-outline-success"
-        :disabled="tasks.length === 0 || loading"
-        @click="onCompleteAll"
-      >
-        Completar todas
-      </button>
+    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap border-bottom pb-2">
+      <div class="d-flex gap-2">
+        <button
+          class="btn btn-sm"
+          :class="isActiveSort('date') ? 'btn-primary' : 'btn-outline-primary'"
+          @click="toggleSort('date')"
+        >
+          Fecha
+          <span v-if="sortField === 'date'">
+            {{ sortDirection === 'asc' ? '↑' : '↓' }}
+          </span>
+        </button>
 
-      <button
-        class="btn btn-sm btn-outline-danger"
-        :disabled="!tasks.some((t) => t.completed) || loading"
-        @click="onDeleteCompleted"
-      >
-        Eliminar completadas
-      </button>
+        <button
+          class="btn btn-sm"
+          :class="isActiveSort('priority') ? 'btn-primary' : 'btn-outline-primary'"
+          @click="toggleSort('priority')"
+        >
+          Prioridad
+          <span v-if="sortField === 'priority'">
+            {{ sortDirection === 'asc' ? '↑' : '↓' }}
+          </span>
+        </button>
 
-      <button
-        class="btn btn-sm btn-outline-secondary ms-auto"
-        :disabled="loading"
-        @click="loadTasks"
-      >
-        Recargar
-      </button>
+        <button v-if="sortField" class="btn btn-sm btn-outline-secondary" @click="clearSort">
+          Limpiar orden
+        </button>
+      </div>
+
+      <div class="d-flex gap-2 ms-auto">
+        <button class="btn btn-sm btn-outline-dark" @click="toggleView">
+          {{ viewMode === 'list' ? 'Vista tarjetas' : 'Vista lista' }}
+        </button>
+
+        <button class="btn btn-sm btn-outline-secondary" :disabled="loading" @click="loadTasks">
+          Recargar
+        </button>
+      </div>
+    </div>
+    <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+      <div class="d-flex gap-2">
+        <button
+          class="btn btn-sm btn-outline-success"
+          :disabled="tasks.length === 0 || loading"
+          @click="onCompleteAll"
+        >
+          Completar todas
+        </button>
+
+        <button
+          class="btn btn-sm btn-outline-danger"
+          :disabled="!tasks.some((t) => t.completed) || loading"
+          @click="onDeleteCompleted"
+        >
+          Eliminar completadas
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="text-center py-4">
@@ -149,7 +232,7 @@ onMounted(loadTasks);
       {{ error }}
     </div>
 
-    <div v-if="!loading && filteredTasks.length" class="list-group">
+    <div v-if="!loading && viewMode === 'list' && filteredTasks.length" class="list-group">
       <RouterLink
         v-for="task in filteredTasks"
         :key="task.id"
@@ -188,7 +271,44 @@ onMounted(loadTasks);
       </RouterLink>
     </div>
 
-    <p v-else-if="hasNoResults" class="text-muted">No hay tareas que coincidan con la búsqueda</p>
+    <div v-else-if="!loading && viewMode === 'cards' && filteredTasks.length" class="row g-3">
+      <div v-for="task in filteredTasks" :key="task.id" class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body">
+            <span
+              class="badge mb-2"
+              :class="task.completed ? 'bg-success' : 'bg-warning text-dark'"
+            >
+              {{ task.completed ? 'Hecha' : 'Pendiente' }}
+            </span>
+
+            <h5 class="card-title">{{ task.name }}</h5>
+
+            <span class="badge mb-2" :class="priorityBadge(task.priority)">
+              {{ task.priority }}
+            </span>
+
+            <p class="text-muted small">{{ task.description }}</p>
+
+            <small class="text-muted d-block mb-2">
+              {{ new Date(task.dueDate).toLocaleDateString() }}
+            </small>
+
+            <button
+              v-if="!task.completed"
+              class="btn btn-sm btn-outline-success"
+              @click.prevent="onCompleteTask(task.id)"
+            >
+              ✓
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p v-else-if="!loading && search && filteredTasks.length === 0" class="text-muted">
+      No hay tareas que coincidan con la búsqueda
+    </p>
 
     <p v-else-if="!loading && tasks.length === 0" class="text-muted">No tienes tareas todavía.</p>
   </section>
